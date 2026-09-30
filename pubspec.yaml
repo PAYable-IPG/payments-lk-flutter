@@ -1,0 +1,30 @@
+name: payments_lk
+description: Open a Payments.lk hosted checkout from a Flutter app on iOS or Android, and get the outcome back through your app's own URL scheme.
+version: 0.1.0
+homepage: https://payments.lk/developers/sdks#flutter
+repository: https://github.com/PAYable-IPG/payments-lk-flutter
+issue_tracker: https://github.com/PAYable-IPG/payments-lk-flutter/issues
+documentation: https://payments.lk/developers/sdks#flutter
+topics:
+  - payments
+  - checkout
+  - sri-lanka
+  - lkr
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+platforms:
+  android:
+  ios:
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_auth_2: ^5.1.0
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter

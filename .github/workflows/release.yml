@@ -1,0 +1,81 @@
+# Publishes payments_lk to pub.dev when a version tag is pushed. The Payments.lk
+# monorepo's release job pushes the tag with the release (CONTRIBUTING.md).
+#
+# pub.dev trusts this repository's tags matching v{{version}}, from the pub.dev
+# environment (automated publishing, set on the package's admin page), so no
+# token is stored here: dart-lang/setup-dart exchanges the workflow's OpenID
+# Connect token for one that flutter pub publish uses. pub.dev takes the first
+# version of a package only from a person, so this publishes the second version
+# on.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # the GitHub release
+  id-token: write # pub.dev automated publishing
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pub.dev
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the pub.dev token
+        uses: dart-lang/setup-dart@v1
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Check the tag names the package's version
+        run: |
+          VERSION="$(sed -n 's/^version: \(.*\)$/\1/p' pubspec.yaml)"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME but pubspec.yaml says $VERSION."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: |
+          flutter pub get
+          flutter test
+
+      # Safe to run again: a version already on pub.dev is left alone. A package pub.dev does not have yet is
+      # skipped with a notice, because pub.dev takes a package's first version only from a person.
+      - name: Publish to pub.dev
+        run: |
+          if curl -sf "https://pub.dev/api/packages/payments_lk/versions/$VERSION" > /dev/null; then
+            echo "payments_lk $VERSION is already on pub.dev."
+          elif ! curl -sf "https://pub.dev/api/packages/payments_lk" > /dev/null; then
+            echo "::notice::payments_lk is not on pub.dev yet. Its first version is published by a person with flutter pub publish; this workflow publishes the versions after it."
+          else
+            flutter pub publish --force
+          fi
+
+      - name: GitHub release
+        run: |
+          awk -v v="$VERSION" 'index($0, "## " v " ") == 1 { on = 1; next } on && /^## / { exit } on { print }' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "::error::CHANGELOG.md has no section for $VERSION."
+            exit 1
+          fi
+          printf '\nInstall: `flutter pub add payments_lk:^%s`\n' "$VERSION" >> "$RUNNER_TEMP/notes.md"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "The release for $GITHUB_REF_NAME exists."
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "Flutter $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
